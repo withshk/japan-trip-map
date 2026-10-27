@@ -45,6 +45,9 @@
   .via { font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #fff; border: 1px solid var(--line); color: var(--fg); cursor: pointer; }
   .via:hover { border-color: var(--c); }
   .arr { color: var(--muted); font-size: 11px; }
+  .stop.future, .leg.future { opacity: .4; }
+  .stop.future:hover { opacity: .8; }
+  .reset { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; color: var(--fg); }
   .note { margin: 8px 8px 0; padding: 10px 12px; border-radius: 10px; background: #f4f1ec; font-size: 12px; color: var(--muted); }
   #map { height: 100%; width: 100%; background: #eef0f2; }
   #map .leaflet-tile-pane { filter: saturate(.7); }
@@ -274,9 +277,14 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_M
 const zcls = ()=>{ const el = document.getElementById('map'); el.classList.toggle('low', map.getZoom() < 12); el.classList.toggle('mid', map.getZoom() < 14); };
 map.on('zoomend', zcls);
 
+const routeLayer = L.layerGroup().addTo(map);
 const layer = L.layerGroup().addTo(map);
 let cur = 0, selKey = null, markers = {};
+let prog = null;      // 날짜 화면에서 몇 번째 목적지까지 그렸는지 (null = 전체)
+let animTok = 0;      // 진행 중인 애니메이션 취소용
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v.replace(/var\((.*)\)/,'$1')).trim();
+const wait = ms => new Promise(r=>setTimeout(r, ms));
+const same = (a,b) => a[0]===b[0] && a[1]===b[1];
 
 const tabs = document.getElementById('tabs');
 const tabNames = ['전체'].concat(DAYS.map((d,i)=>`${i+1}일차 ${d.d}`));
@@ -293,32 +301,38 @@ function pinHtml(key, nums, color, dim){
   return `<div class="${cls}" style="--c:${color}"><div class="ph" style="${bg}">${nums?`<span class="no">${nums}</span>`:''}</div><span class="lb">${p.name}</span></div>`;
 }
 
-function seg(a, b, m, color, thin){
-  if (a[0]===b[0] && a[1]===b[1]) return;
-  L.polyline([a,b], { color, weight: thin?2.5:4, opacity: thin?.55:.85,
-    dashArray: m==='train' ? '8 7' : m==='taxi' ? '2 6' : null, lineCap:'round' }).addTo(layer);
+// i번째 목적지로 가는 구간을 [시작, 끝, 이동수단] 조각으로 나눔
+function legSegs(d, i){
+  const s = d.stops[i], a = P[d.stops[i-1].p].ll, b = P[s.p].ll;
+  let out;
+  if (s.v && s.v.length){
+    const vs = s.v.map(k=>P[k].ll);
+    out = [{a, b:vs[0], m:'walk'}];
+    for (let j=1;j<vs.length;j++) out.push({a:vs[j-1], b:vs[j], m:'train'});
+    out.push({a:vs[vs.length-1], b, m:'walk'});
+  } else out = [{a, b, m:s.m}];
+  return out.filter(g=>!same(g.a,g.b));
 }
-function drawDay(day, opts={}){
-  const color = css(day.c);
-  for (let i=1;i<day.stops.length;i++){
-    const s = day.stops[i], a = P[day.stops[i-1].p].ll, b = P[s.p].ll;
-    if (s.v && s.v.length){
-      const vs = s.v.map(k=>P[k].ll);
-      seg(a, vs[0], 'walk', color, opts.thin);
-      for (let j=1;j<vs.length;j++) seg(vs[j-1], vs[j], 'train', color, opts.thin);
-      seg(vs[vs.length-1], b, 'walk', color, opts.thin);
-    } else seg(a, b, s.m, color, opts.thin);
-  }
+function lineStyle(m, color, thin){
+  return { color, weight: thin?2.5:4, opacity: thin?.55:.85, dashArray: m==='train' ? '8 7' : m==='taxi' ? '2 6' : null, lineCap:'round' };
+}
+function drawLeg(d, i, thin){
+  const color = css(d.c);
+  legSegs(d,i).forEach(g=>L.polyline([g.a,g.b], lineStyle(g.m, color, thin)).addTo(routeLayer));
+}
+function drawDay(d, upto, thin){
+  const last = upto==null ? d.stops.length-1 : upto;
+  for (let i=1;i<=last;i++) drawLeg(d, i, thin);
 }
 
 function show(i){
-  cur = i; selKey = null; closeDetail();
+  animTok++; cur = i; selKey = null; prog = null; closeDetail();
   [...tabs.children].forEach((b,j)=>b.classList.toggle('on', i===j));
-  layer.clearLayers(); markers = {};
+  routeLayer.clearLayers(); layer.clearLayers(); markers = {};
   const sum = document.getElementById('daysum'), list = document.getElementById('list');
   let bounds = [];
   if (i===0){
-    DAYS.forEach(d=>drawDay(d,{thin:true}));
+    DAYS.forEach(d=>drawDay(d, null, true));
     const seen = new Set();
     DAYS.forEach(d=>d.stops.forEach(s=>{ if(seen.has(s.p)) return; seen.add(s.p); addMarker(s.p, '', P[s.p].type==='hotel'?'#1d1b19':css(d.c)); bounds.push(P[s.p].ll); }));
     sum.innerHTML = `<b>4박 5일 전체 동선</b><span>날짜를 누르면 그날 경로만 보여줌</span>`;
@@ -327,7 +341,7 @@ function show(i){
     list.querySelectorAll('.stop').forEach(el=>el.onclick=()=>show(+el.dataset.day));
   } else {
     const d = DAYS[i-1], color = css(d.c);
-    drawDay(d);
+    drawDay(d, null);
     const nums = {};
     d.stops.forEach((s,k)=>{ (nums[s.p] = nums[s.p]||[]).push(k+1); });
     const staSet = new Set(); d.stops.forEach(s=>(s.v||[]).forEach(k=>{ if(!nums[k]) staSet.add(k); }));
@@ -339,39 +353,122 @@ function show(i){
       const sb = L.latLngBounds(spotsLL).pad(0.6);
       bounds = keys.concat([...staSet]).map(k=>P[k].ll).filter(ll=>sb.contains(ll));
     } else bounds = keys.map(k=>P[k].ll);
-    sum.innerHTML = `<b>${d.title}</b><span>${d.d} (${d.w}) · ${d.steps}</span>`;
+    renderSum();
     let h = '';
     d.stops.forEach((s,k)=>{
       const p = P[s.p];
       if (k>0) {
         const via = (s.v||[]).map(v=>`<span class="via" data-key="${v}">${P[v].name}</span>`).join('<span class="arr">›</span>');
-        h += `<div class="leg ${s.m}" style="--c:${d.c}"><div></div><div class="bar"></div><div class="lt">${s.l||''}${via?`<div class="vias">${via}</div>`:''}</div></div>`;
+        h += `<div class="leg ${s.m}" data-idx="${k}" style="--c:${d.c}"><div></div><div class="bar"></div><div class="lt">${s.l||''}${via?`<div class="vias">${via}</div>`:''}</div></div>`;
       }
-      h += `<div class="stop" data-key="${s.p}" style="--c:${d.c}"><div class="t">${s.t}</div>${p.img?`<img class="th" src="${p.img}" alt="">`:`<div class="th">${p.type==='dot'?'역':''}</div>`}<div><div class="nm">${p.name}</div><div class="nt">${s.n}</div></div></div>`;
+      h += `<div class="stop" data-idx="${k}" data-key="${s.p}" style="--c:${d.c}"><div class="t">${s.t}</div>${p.img?`<img class="th" src="${p.img}" alt="">`:`<div class="th">${p.type==='dot'?'역':''}</div>`}<div><div class="nm">${p.name}</div><div class="nt">${s.n}</div></div></div>`;
     });
     h += `<div class="note">${d.note}</div>`;
     list.innerHTML = h;
-    list.querySelectorAll('.stop').forEach(el=>el.onclick=()=>select(el.dataset.key, true));
+    list.querySelectorAll('.stop').forEach(el=>el.onclick=()=>goStop(+el.dataset.idx));
     list.querySelectorAll('.via').forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); select(el.dataset.key, true); });
   }
   list.scrollTop = 0;
   if (bounds.length) map.fitBounds(L.latLngBounds(bounds).pad(0.12), { maxZoom: 15 }); setTimeout(zcls, 50);
 }
 
+function renderSum(){
+  const d = DAYS[cur-1];
+  document.getElementById('daysum').innerHTML = `<b>${d.title}</b><span>${d.d} (${d.w}) · ${d.steps}</span>` +
+    (prog!=null ? `<button class="reset" id="reset">전체 경로 보기</button>` : `<span>목적지를 누르면 거기까지만, 다음 목적지를 누르면 이어서 그려줌</span>`);
+  const r = document.getElementById('reset'); if (r) r.onclick = ()=>show(cur);
+}
+
 function addMarker(key, nums, color){
   const m = L.marker(P[key].ll, { icon: L.divIcon({ html: pinHtml(key, nums, color), className:'', iconSize:[0,0] }), riseOnHover:true, zIndexOffset: P[key].type==='station'? -500 : 0 });
-  m.on('click', ()=>select(key, false));
-  m._meta = { key, nums, color };
+  m.on('click', (e)=>{ L.DomEvent.stopPropagation(e); markerClick(key); });
+  m._meta = { key, nums, color, dim:false };
   m.addTo(layer); markers[key] = m;
+}
+function markerClick(key){
+  if (cur===0 || P[key].type==='station') return select(key, false);
+  const d = DAYS[cur-1];
+  const idxs = d.stops.map((s,k)=>s.p===key?k:-1).filter(k=>k>=0);
+  const next = idxs.find(k=>prog!=null && k>prog);
+  goStop(next!=null ? next : idxs[0]);
 }
 
 function refreshPins(){
-  Object.values(markers).forEach(m=>{ const {key,nums,color} = m._meta; m.setIcon(L.divIcon({ html: pinHtml(key, nums, color), className:'', iconSize:[0,0] })); m.setZIndexOffset(key===selKey?1000:(P[key].type==='station'?-500:0)); });
+  Object.values(markers).forEach(m=>{ const {key,nums,color,dim} = m._meta; m.setIcon(L.divIcon({ html: pinHtml(key, nums, color, dim), className:'', iconSize:[0,0] })); m.setZIndexOffset(key===selKey?1000:(P[key].type==='station'?-500:0)); });
+}
+
+// 지금까지 그린 지점(prog) 기준으로 지도 핀/목록 흐리게
+function updateProgressUI(){
+  const d = DAYS[cur-1];
+  const reached = new Set();
+  d.stops.forEach((s,k)=>{ if (prog==null || k<=prog){ reached.add(s.p); if (k>0) (s.v||[]).forEach(v=>reached.add(v)); } });
+  Object.values(markers).forEach(m=>{ m._meta.dim = !reached.has(m._meta.key); });
+  refreshPins();
+  document.querySelectorAll('#list [data-idx]').forEach(el=>el.classList.toggle('future', prog!=null && +el.dataset.idx > prog));
+  renderSum();
+}
+
+async function goStop(k){
+  if (cur===0) return;
+  const d = DAYS[cur-1], tok = ++animTok;
+  const key = d.stops[k].p;
+  markListSel(k);
+  if (prog==null || k<=prog || k===0){
+    // 이전 구간까지만 정적으로 그리기
+    prog = k; routeLayer.clearLayers(); drawDay(d, k); updateProgressUI();
+    select(key, true);
+    return;
+  }
+  // 다음 목적지: 선을 그리면서 지도가 따라감
+  closeDetail(true);
+  const from = prog;
+  for (let i=from+1; i<=k; i++){
+    const ok = await animateLeg(d, i, tok);
+    if (!ok || tok!==animTok) return;
+    prog = i; updateProgressUI(); markListSel(i);
+  }
+  if (tok!==animTok) return;
+  select(key, true);
+}
+
+function markListSel(k){
+  document.querySelectorAll('.stop[data-idx]').forEach(el=>el.classList.toggle('sel', +el.dataset.idx===k));
+  const li = document.querySelector(`.stop[data-idx="${k}"]`); if (li) li.scrollIntoView({ block:'nearest', behavior:'smooth' });
+}
+
+async function animateLeg(d, i, tok){
+  const segs = legSegs(d, i), color = css(d.c);
+  if (!segs.length) return true;
+  const pts = segs.flatMap(g=>[g.a,g.b]);
+  const z = Math.max(11, Math.min(15, map.getBoundsZoom(L.latLngBounds(pts).pad(0.25)) + 1));
+  map.flyTo(segs[0].a, z, { duration: .6 }); await wait(650);
+  for (const g of segs){
+    if (tok!==animTok) return false;
+    await animSeg(g, color, tok);
+  }
+  return tok===animTok;
+}
+function animSeg(g, color, tok){
+  return new Promise(res=>{
+    const dist = map.distance(g.a, g.b);
+    const dur = Math.max(450, Math.min(2200, dist / (g.m==='walk' ? 1.1 : 10)));
+    const line = L.polyline([g.a, g.a], lineStyle(g.m, color)).addTo(routeLayer);
+    const t0 = performance.now();
+    const step = t=>{
+      if (tok!==animTok){ res(); return; }
+      const r = Math.min(1, (t-t0)/dur), e = r<.5 ? 2*r*r : 1-Math.pow(-2*r+2,2)/2;
+      const p = [g.a[0]+(g.b[0]-g.a[0])*e, g.a[1]+(g.b[1]-g.a[1])*e];
+      line.setLatLngs([g.a, p]);
+      map.panTo(p, { animate:false });
+      if (r<1) requestAnimationFrame(step); else res();
+    };
+    requestAnimationFrame(step);
+  });
 }
 
 function select(key, fly){
   selKey = key; refreshPins();
-  document.querySelectorAll('.stop[data-key]').forEach(el=>el.classList.toggle('sel', el.dataset.key===key));
+  if (P[key].type!=='station' && cur===0) document.querySelectorAll('.stop[data-key]').forEach(el=>el.classList.toggle('sel', el.dataset.key===key));
   const p = P[key];
   const visits = [];
   DAYS.forEach((d,k)=>d.stops.forEach(s=>{
@@ -394,15 +491,15 @@ function select(key, fly){
   if (!p.img) el.querySelector('.x').style.background = 'rgba(0,0,0,.35)';
   }
   el.classList.add('open'); el.scrollTop = 0;
-  el.querySelector('.x').onclick = closeDetail;
+  el.querySelector('.x').onclick = ()=>closeDetail();
   if (fly) map.flyTo(p.ll, Math.max(map.getZoom(), 14), { duration: .6 });
-  const li = document.querySelector(`.stop[data-key="${key}"]`); if (li && !fly) li.scrollIntoView({ block:'nearest', behavior:'smooth' });
 }
-function closeDetail(){
+function closeDetail(keepSel){
   document.getElementById('detail').classList.remove('open');
-  if (selKey){ selKey = null; refreshPins(); document.querySelectorAll('.stop.sel').forEach(e=>e.classList.remove('sel')); }
+  if (selKey){ selKey = null; refreshPins(); }
+  if (!keepSel && cur===0) document.querySelectorAll('.stop.sel').forEach(e=>e.classList.remove('sel'));
 }
-map.on('click', closeDetail);
+map.on('click', ()=>closeDetail());
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeDetail(); });
 
 show(0);
