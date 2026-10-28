@@ -136,10 +136,15 @@ const P = {
   namba: { name:'난카이 난바역', jp:'なんば駅', ll:[34.6628,135.5016], type:'dot',
     desc:'공항 열차(라피트)가 출발하고 도착하는 역. 숙소까지 걸어서 15분 정도.',
     tips:['라피트는 전석 지정석이라 표를 미리 사두면 편함'] },
+  nest: { name:'짐 보관소 n·e·s·t', jp:'n・e・s・t 南海なんば', ll:[34.66335,135.50205], type:'dot',
+    desc:'난카이 난바역 2층 중앙 개찰구 쪽에 있는 짐 보관 카운터. 공항에서 라피트 내리면 역 밖으로 안 나가고 바로 맡길 수 있음.',
+    kv:[['위치','난카이 난바역 2층 중앙 개찰구 쪽'],['요금','1개 하루 800엔 (크기 상관없음)'],['크기 제한','세 변 합 220cm, 30kg 이하'],['보관 시간','10:00 – 20:00'],['결제','카드, 교통카드(ICOCA 등), PayPay']],
+    tips:['16시 체크인 전에 찾아서 숙소로 이동','운영 시간은 출처마다 조금 달라서 (10–20시 / 9–21시) 가기 전에 공식 사이트 확인','근처에 코인로커도 많음 (2층 중앙 개찰구 주변)'],
+    link:'https://www.howto-osaka.com/en/nest/' },
   rs: { name:'RS Amemura', jp:'RS Amemura', ll:[34.66968,135.49733], type:'hotel', img:'img/rs_amemura.jpg',
     desc:'4박 내내 묵는 숙소 (아고다 예약 확정). 아메리카무라 쪽 아파트형 숙소라 방을 통째로 쓰고 주방이랑 세탁기가 있음. 도톤보리까지 걸어서 5분 정도.',
     kv:[['형태','아파트형 숙소'],['체크인','16:00 – 24:00'],['체크아웃','11:00까지'],['시설','주방, 세탁기, 무료 Wi-Fi, 엘리베이터'],['가까운 역','오사카난바역 400m · 지하철 난바역 650m'],['주소','2-10-28 Shinsaibashi, Chuo-ku, Osaka'],['평점','부킹닷컴 8.8 (위치 9.5 · 청결 9.0 · 가성비 9.2)']],
-    tips:['체크인이 16시부터라 첫날 짐을 먼저 맡길 수 있는지 미리 문의. 안 되면 난바역 코인로커','아파트형이라 출입 방법 안내 메시지를 미리 확인','세탁기가 있어서 옷을 적게 챙겨도 됨'],
+    tips:['첫날 짐은 난카이 난바역 n·e·s·t에 맡겼다가 16시 체크인 전에 찾아오기','아파트형이라 출입 방법 안내 메시지를 미리 확인','세탁기가 있어서 옷을 적게 챙겨도 됨'],
     link:'https://www.booking.com/hotel/jp/rs-xin-zhai-qiao-amemera.ko.html' },
   shinsaibashi: { name:'신사이바시스지', jp:'心斎橋筋商店街', ll:[34.67422,135.50137], img:'img/shinsaibashi.jpg',
     desc:'지붕 덮인 긴 상점가. 드럭스토어, 브랜드, 잡화가 쭉 이어지고 남쪽 끝이 도톤보리랑 붙어 있음. 비 와도 상관없음.',
@@ -225,15 +230,16 @@ Object.entries(S).forEach(([k,[name,jp,line,ll]])=>{ P[k] = { name, jp, line, ll
 
 // m: 이 장소까지 오는 방법, v: 거쳐가는 역
 const DAYS = [
-  { d:'11/22', w:'일', title:'도착, 난바·도톤보리', steps:'약 1.2만보', c:'var(--d1)', stops:[
+  { d:'11/22', w:'일', title:'도착, 난바·도톤보리', steps:'약 1.3만보', c:'var(--d1)', stops:[
     { t:'10:00', p:'kix', n:'도착, 입국심사' },
     { t:'12:15', p:'namba', n:'난바 도착', m:'train', l:'난카이 라피트 약 39분 (11:35 출발 예시)' },
-    { t:'12:30', p:'rs', n:'짐 맡기기 (안 되면 역 코인로커)', m:'walk', l:'걸어서 약 15분' },
-    { t:'13:00', p:'shinsaibashi', n:'점심, 아케이드 쇼핑', m:'walk', l:'걸어서 약 10분' },
-    { t:'16:00', p:'rs', n:'체크인, 휴식', m:'walk', l:'걸어서 약 10분' },
+    { t:'12:20', p:'nest', n:'짐 맡기기 (1개 800엔)', m:'walk', l:'역 안 2층, 바로' },
+    { t:'13:00', p:'shinsaibashi', n:'점심, 아케이드 쇼핑', m:'walk', l:'걸어서 약 15분' },
+    { t:'15:30', p:'nest', n:'짐 찾기', m:'walk', l:'걸어서 약 15분' },
+    { t:'16:00', p:'rs', n:'체크인, 휴식', m:'walk', l:'캐리어 끌고 걸어서 약 15분' },
     { t:'18:00', p:'dotonbori', n:'저녁, 야경, 돈키호테', m:'walk', l:'걸어서 약 5분' },
     { t:'21:00', p:'rs', n:'숙소', m:'walk', l:'걸어서 약 5분' } ],
-    note:'첫날이라 가볍게. 체크인이 16시부터라 그 전엔 짐만 맡기고 돌아다니기.' },
+    note:'체크인이 16시라 그 전엔 난카이 난바역 n·e·s·t에 짐 맡기고 가볍게 돌아다니기.' },
   { d:'11/23', w:'월', title:'오사카성, 우메다', steps:'약 1.6만보', c:'var(--d2)', stops:[
     { t:'09:00', p:'rs', n:'출발' },
     { t:'09:30', p:'osakajo', n:'단풍·은행 산책, 천수각', m:'train', v:['namba_m','tanimachi9','tanimachi4'], l:'지하철 난바역 → 센니치마에선 → 다니마치9초메에서 다니마치선, 약 25분' },
@@ -489,7 +495,7 @@ function select(key, fly){
     <p>${p.desc}</p>
     ${p.kv?`<div class="kv">${p.kv.map(([a,b])=>`<div>${a}</div><div>${b}</div>`).join('')}</div>`:''}
     ${p.tips&&p.tips.length?`<ul>${p.tips.map(t=>`<li>${t}</li>`).join('')}</ul>`:''}
-    <a class="btn" href="${g}" target="_blank" rel="noopener">구글 지도</a>${p.link?`<a class="btn ghost" href="${p.link}" target="_blank" rel="noopener">${key==='rs'?'숙소 정보':'공식 사이트'}</a>`:''}</div>`;
+    <a class="btn" href="${g}" target="_blank" rel="noopener">구글 지도</a>${p.link?`<a class="btn ghost" href="${p.link}" target="_blank" rel="noopener">${key==='rs'?'숙소 정보':key==='nest'?'n·e·s·t 안내':'공식 사이트'}</a>`:''}</div>`;
   if (!p.img) el.querySelector('.x').style.background = 'rgba(0,0,0,.35)';
   }
   el.classList.add('open'); el.scrollTop = 0;
